@@ -64,7 +64,7 @@ jobs:
           set -o pipefail
           source build/envsetup.sh
           lunch twrp_bf61-eng
-          mka bootimage -j$(nproc) 2>&1 | tee build.log
+          mka recoveryimage -j$(nproc) 2>&1 | tee build.log
 
       - name: Upload artifacts
         if: always()
@@ -72,7 +72,7 @@ jobs:
         with:
           name: twrp-bf61
           path: |
-            $HOME/twrp-src/out/target/product/bf61/boot.img
+            $HOME/twrp-src/out/target/product/bf61/recovery.img
             $HOME/twrp-src/out/target/product/bf61/*.zip
             $HOME/twrp-src/build.log
           if-no-files-found: warn

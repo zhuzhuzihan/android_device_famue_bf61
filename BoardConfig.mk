@@ -47,9 +47,8 @@ BOARD_KERNEL_TAGS_OFFSET := 0x07808000
 BOARD_DTB_OFFSET := 0x07808000
 BOARD_BOOTIMG_HEADER_VERSION := 2
 BOARD_INCLUDE_DTB_IN_BOOTIMG := true
-BOARD_PREBUILT_DTBIMAGE_DIR := $(DEVICE_PATH)/prebuilt
+BOARD_PREBUILT_DTBIMAGE_DIR := $(DEVICE_PATH)/prebuilt/dtb
 BOARD_PREBUILT_DTBOIMAGE := $(DEVICE_PATH)/prebuilt/dtbo.img
-BOARD_INCLUDE_RECOVERY_DTBO := false
 
 BOARD_MKBOOTIMG_ARGS += --base $(BOARD_KERNEL_BASE)
 BOARD_MKBOOTIMG_ARGS += --pagesize $(BOARD_KERNEL_PAGESIZE)
@@ -60,8 +59,9 @@ BOARD_MKBOOTIMG_ARGS += --tags_offset $(BOARD_KERNEL_TAGS_OFFSET)
 BOARD_MKBOOTIMG_ARGS += --dtb_offset $(BOARD_DTB_OFFSET)
 BOARD_MKBOOTIMG_ARGS += --header_version $(BOARD_BOOTIMG_HEADER_VERSION)
 
-# Recovery built into the boot image (no dedicated recovery partition)
-BOARD_USES_RECOVERY_AS_BOOT := true
+# No dedicated recovery partition: TWRP is built as recovery.img and flashed
+# to the boot partition (MTK A/B convention, same as Redmi A1/A2 blossom).
+# The boot header v2 + dtb layout matches the stock boot_a.img exactly.
 
 # Partitions (sizes dumped from /dev/block/by-name)
 BOARD_FLASH_BLOCK_SIZE := 131072
