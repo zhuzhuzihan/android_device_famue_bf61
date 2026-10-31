@@ -21,6 +21,11 @@ TARGET_2ND_CPU_ABI2 := armeabi
 TARGET_2ND_CPU_VARIANT := generic
 TARGET_2ND_CPU_VARIANT_RUNTIME := cortex-a53
 
+# App bits: minimal-manifest defaults to 32-bit apps only, which the
+# board_config sanity check rejects on arm64 boards
+TARGET_SUPPORTS_32_BIT_APPS := true
+TARGET_SUPPORTS_64_BIT_APPS := true
+
 # Bootloader
 TARGET_BOOTLOADER_BOARD_NAME := bf61
 TARGET_NO_BOOTLOADER := true
