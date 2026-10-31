@@ -108,7 +108,12 @@ TW_SCREEN_BLANK_ON_BOOT := true
 TW_BRIGHTNESS_PATH := "/sys/class/leds/lcd-backlight/brightness"
 TW_MAX_BRIGHTNESS := 255
 TW_DEFAULT_BRIGHTNESS := 128
-TW_EXTRA_LANGUAGES := true
+# Size diet: boot.img must fit in 32MB with a 12.2MB prebuilt kernel.
+# Nano drags in 11MB of terminfo, bash and TTF fonts are expendable.
+TW_EXTRA_LANGUAGES := false
+TW_EXCLUDE_NANO := true
+TW_EXCLUDE_BASH := true
+TW_DISABLE_TTF := true
 TW_USE_TOOLBOX := true
 TW_INCLUDE_RESETPROP := true
 TW_INCLUDE_NTFS_3G := true
