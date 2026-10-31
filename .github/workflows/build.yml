@@ -50,7 +50,7 @@ jobs:
         run: |
           export PATH=$HOME/.local/bin:$PATH
           cd $HOME/twrp-src
-          repo sync -c -j4 --no-sync-blobs --no-tags --fail-fast
+          repo sync -c -j4 --no-tags --fail-fast
 
       - name: Link device tree
         run: |
