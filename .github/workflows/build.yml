@@ -72,7 +72,7 @@ jobs:
         with:
           name: twrp-bf61
           path: |
-            $HOME/twrp-src/out/target/product/bf61/recovery.img
-            $HOME/twrp-src/out/target/product/bf61/*.zip
-            $HOME/twrp-src/build.log
+            /home/runner/twrp-src/out/target/product/bf61/recovery.img
+            /home/runner/twrp-src/out/target/product/bf61/*.zip
+            /home/runner/twrp-src/build.log
           if-no-files-found: warn
