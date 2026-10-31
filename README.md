@@ -26,19 +26,18 @@ repo sync -c -j$(nproc)
 git clone https://github.com/zhuzhuzihan/android_device_famue_bf61 device/famue/bf61
 source build/envsetup.sh
 lunch twrp_bf61-eng
-mka recoveryimage -j$(nproc)
+mka bootimage -j$(nproc)
 ```
 
-Output: `out/target/product/bf61/recovery.img` — flash to the **boot**
-partition (`fastboot flash boot_a recovery.img`); there is no dedicated
-recovery partition on this device. The B-slot images on this device are
-empty; do not boot from slot B.
+Output: `out/target/product/bf61/boot.img` (recovery merged into the boot
+image via `BOARD_USES_RECOVERY_AS_BOOT`) — flash to the **boot** partition
+(`fastboot flash boot boot.img`). There is no dedicated recovery partition
+on this device. The B-slot images are empty; do not boot from slot B.
 
 ## CI
 
 GitHub Actions workflow `.github/workflows/build.yml` builds on every push and
-on manual dispatch; `recovery.img` (to be flashed as boot) is uploaded as an
-artifact.
+on manual dispatch; `boot.img` (recovery merged) is uploaded as an artifact.
 
 ## Backups
 
