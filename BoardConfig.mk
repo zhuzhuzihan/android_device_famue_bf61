@@ -36,7 +36,10 @@ BUILD_BROKEN_ELF_PREBUILT_PRODUCT_COPY_FILES := true
 
 # Kernel (prebuilt from stock boot_a.img)
 TARGET_PREBUILT_KERNEL := $(DEVICE_PATH)/prebuilt/kernel
+TARGET_PREBUILT_DTB := $(DEVICE_PATH)/prebuilt/dtb.img
 BOARD_KERNEL_IMAGE_NAME := Image.gz
+TARGET_FORCE_PREBUILT_KERNEL := true
+BOARD_MKBOOTIMG_ARGS += --dtb $(TARGET_PREBUILT_DTB)
 BOARD_KERNEL_CMDLINE := bootopt=64S3,32N2,64N2 buildvariant=user androidboot.selinux=permissive
 BOARD_KERNEL_BASE := 0x40078000
 BOARD_KERNEL_PAGESIZE := 2048
@@ -46,8 +49,6 @@ BOARD_SECOND_OFFSET := 0x00e88000
 BOARD_KERNEL_TAGS_OFFSET := 0x07808000
 BOARD_DTB_OFFSET := 0x07808000
 BOARD_BOOTIMG_HEADER_VERSION := 2
-BOARD_INCLUDE_DTB_IN_BOOTIMG := true
-BOARD_PREBUILT_DTBIMAGE_DIR := $(DEVICE_PATH)/prebuilt/dtb
 BOARD_PREBUILT_DTBOIMAGE := $(DEVICE_PATH)/prebuilt/dtbo.img
 
 BOARD_MKBOOTIMG_ARGS += --base $(BOARD_KERNEL_BASE)
@@ -59,9 +60,14 @@ BOARD_MKBOOTIMG_ARGS += --tags_offset $(BOARD_KERNEL_TAGS_OFFSET)
 BOARD_MKBOOTIMG_ARGS += --dtb_offset $(BOARD_DTB_OFFSET)
 BOARD_MKBOOTIMG_ARGS += --header_version $(BOARD_BOOTIMG_HEADER_VERSION)
 
-# No dedicated recovery partition: TWRP is built as recovery.img and flashed
-# to the boot partition (MTK A/B convention, same as Redmi A1/A2 blossom).
-# The boot header v2 + dtb layout matches the stock boot_a.img exactly.
+# No dedicated recovery partition: recovery is embedded in the boot image
+# (BOARD_USES_RECOVERY_AS_BOOT), flashed to the boot partition.
+BOARD_USES_RECOVERY_AS_BOOT := true
+TW_HAS_NO_RECOVERY_PARTITION := true
+TW_EXCLUDE_APEX := true
+
+# Recovery fstab lives inside the in-tree recovery ramdisk
+TARGET_RECOVERY_FSTAB := $(DEVICE_PATH)/recovery/root/system/etc/recovery.fstab
 
 # Partitions (sizes dumped from /dev/block/by-name)
 BOARD_FLASH_BLOCK_SIZE := 131072

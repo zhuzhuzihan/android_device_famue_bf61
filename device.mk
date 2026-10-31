@@ -1,6 +1,11 @@
 # TWRP device configuration for Famue BF61
 
-DEVICE_PATH := device/famue/bf61
+LOCAL_PATH := device/famue/bf61
+
+# Dynamic partitions / Virtual A/B (matches stock)
+PRODUCT_USE_DYNAMIC_PARTITIONS := true
+ENABLE_VIRTUAL_AB := true
+$(call inherit-product, $(SRC_TARGET_DIR)/product/virtual_ab_ota.mk)
 
 # Runtime properties
 PRODUCT_PROPERTY_OVERRIDES += \
@@ -8,11 +13,3 @@ PRODUCT_PROPERTY_OVERRIDES += \
     ro.boot.dynamic_partitions=true \
     ro.boot.dynamic_partitions_retrofit=false \
     ro.crypto.metadata.enabled=true
-
-
-# Recovery install paths
-TARGET_RECOVERY_FSTAB := $(DEVICE_PATH)/recovery.fstab
-PRODUCT_COPY_FILES += \
-    $(DEVICE_PATH)/recovery/root/init.recovery.mt6762.rc:recovery/root/init.recovery.mt6762.rc \
-    $(DEVICE_PATH)/recovery/root/ueventd.mt6762.rc:recovery/root/ueventd.mt6762.rc \
-    $(DEVICE_PATH)/recovery/root/etc/vintf/manifest.xml:recovery/root/etc/vintf/manifest.xml
