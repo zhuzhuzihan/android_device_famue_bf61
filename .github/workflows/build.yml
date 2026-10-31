@@ -11,16 +11,11 @@ jobs:
   build:
     runs-on: ubuntu-22.04
     steps:
-      - name: Maximize build space
-        uses: easimon/maximize-build-space@master
-        with:
-          root-reserve-mb: 4096
-          swap-size-mb: 1024
-          remove-dotnet: 'true'
-          remove-android: 'true'
-          remove-haskell: 'true'
-          remove-codeql: 'true'
-          remove-docker-images: 'true'
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/local/lib/android /opt/ghc /usr/local/.ghcup             /usr/share/dotnet /opt/hostedtoolcache/CodeQL             /usr/local/share/boost /usr/lib/jvm/*-temurin-*             /usr/share/swift /usr/local/lib/node_modules || true
+          sudo docker image prune -af || true
+          df -h /
 
       - name: Check out device tree
         uses: actions/checkout@v4
@@ -30,7 +25,9 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y repo git-lfs \
+          sudo apt-get install -y python3-pip
+          sudo ln -sf /usr/bin/python3 /usr/bin/python
+          sudo apt-get install -y git-lfs \
             bc bison build-essential ccache curl flex g++-multilib gcc-multilib \
             git gnupg gperf imagemagick lib32ncurses5-dev lib32readline-dev \
             lib32z1-dev libelf-dev liblz4-tool libncurses5 libncurses5-dev \
@@ -43,7 +40,7 @@ jobs:
           cd $HOME/twrp-src
           git config --global user.name "github-actions[bot]"
           git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          repo init --depth=1 -u https://github.com/minimal-manifest-twrp/platform_manifest_twrp_aosp.git -b twrp-12.1
+          echo "y" | bash <(curl -s https://storage.googleapis.com/git-repo-downloads/repo) init --depth=1 -u https://github.com/minimal-manifest-twrp/platform_manifest_twrp_aosp.git -b twrp-12.1
 
       - name: Sync sources
         run: |
