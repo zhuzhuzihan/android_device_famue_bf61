@@ -56,7 +56,7 @@ jobs:
           mkdir -p device/famue
           git clone --depth=1 https://github.com/zhuzhuzihan/android_device_famue_bf61 device/famue/bf61
           ls -la device/famue/bf61/
-          ls -la device/famue/bf61/prebuilt/dtb/dtb.img device/famue/bf61/prebuilt/kernel
+          ls -la device/famue/bf61/prebuilt/
 
       - name: Build boot image
         run: |
