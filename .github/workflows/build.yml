@@ -40,10 +40,15 @@ jobs:
           cd $HOME/twrp-src
           git config --global user.name "github-actions[bot]"
           git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          echo "y" | bash <(curl -s https://storage.googleapis.com/git-repo-downloads/repo) init --depth=1 -u https://github.com/minimal-manifest-twrp/platform_manifest_twrp_aosp.git -b twrp-12.1
+          mkdir -p $HOME/.local/bin
+          curl -s https://storage.googleapis.com/git-repo-downloads/repo -o $HOME/.local/bin/repo
+          chmod a+x $HOME/.local/bin/repo
+          export PATH=$HOME/.local/bin:$PATH
+          repo init --depth=1 -u https://github.com/minimal-manifest-twrp/platform_manifest_twrp_aosp.git -b twrp-12.1
 
       - name: Sync sources
         run: |
+          export PATH=$HOME/.local/bin:$PATH
           cd $HOME/twrp-src
           repo sync -c -j4 --no-sync-blobs --no-tags --fail-fast
 
