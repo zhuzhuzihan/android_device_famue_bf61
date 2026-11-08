@@ -67,7 +67,7 @@ TW_HAS_NO_RECOVERY_PARTITION := true
 TW_EXCLUDE_APEX := true
 
 # Recovery fstab lives inside the in-tree recovery ramdisk
-TARGET_RECOVERY_FSTAB := $(DEVICE_PATH)/recovery/root/system/etc/recovery.fstab
+TARGET_RECOVERY_FSTAB := $(DEVICE_PATH)/recovery.fstab
 
 # Partitions (sizes dumped from /dev/block/by-name)
 BOARD_FLASH_BLOCK_SIZE := 131072
