@@ -111,9 +111,9 @@ TW_DEFAULT_BRIGHTNESS := 128
 # Size diet: boot.img must fit in 32MB with a 12.2MB prebuilt kernel.
 # Nano drags in 11MB of terminfo, bash and TTF fonts are expendable.
 TW_EXTRA_LANGUAGES := false
+TW_DISABLE_TTF := false
 TW_EXCLUDE_NANO := true
 TW_EXCLUDE_BASH := true
-TW_DISABLE_TTF := true
 TW_USE_TOOLBOX := true
 TW_INCLUDE_RESETPROP := true
 TW_INCLUDE_NTFS_3G := true
