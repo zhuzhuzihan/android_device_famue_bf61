@@ -164,7 +164,8 @@ ks, ka, rs, ra, ss, sa, ta, page, hv, osv = struct.unpack_from("<10I", d, 8)
 cmdline = d[0x40:0x240].split(b"\0")[0].decode("latin-1")
 extra = d[0x260:0x660].split(b"\0")[0].decode("latin-1")
 hsz = struct.unpack_from("<I", d, 0x66C)[0]
-dtb_size, dtb_addr = struct.unpack_from("<QQ", d, 0x670)
+dtb_size = struct.unpack_from("<I", d, 0x670)[0]
+dtb_addr = struct.unpack_from("<I", d, 0x674)[0]
 
 boot_size = 33554432
 for line in open(boardconfig, encoding="utf-8", errors="replace"):
