@@ -25,10 +25,11 @@ product                              /product     ext4    ro                    
 # fileencryption=  -> fbe.contents / fbe.filenames
 # metadata_encryption= -> metadata.contents / metadata.filenames
 # keydirectory=    -> Key_Directory；非空即判定 Is_FBE，/data 不直接挂载，走 Decrypt_Data()
-# 注意：stock first_stage fstab 未写 metadata_encryption；本机 /metadata(md_udc) 与
-# keydirectory 都在，按 AOSP 12 的 wrappedkey_v0 约定补齐。若首启解密失败，先核对此值
-# 与 /vendor/etc/fstab.mt6762（或 fstab.mt6765）里的 metadata_encryption=。
-/dev/block/by-name/userdata          /data        ext4    noatime,nosuid,nodev,noauto_da_alloc,errors=panic,inlinecrypt  wait,check,quota,formattable,resize,fileencryption=aes-256-xts:aes-256-cts:v2,metadata_encryption=aes-256-xts:wrappedkey_v0,keydirectory=/metadata/vold/metadata_encryption
+# 注意：stock fstab 未写 metadata_encryption；本机 keymaster 是 puresoft 纯软件实现、
+# eMMC 无 ICE，metadata key 未走硬件包裹（key 布局为标准 encrypted_key +
+# keymaster_key_blob + secdiscardable），故只补 cipher 不带 wrappedkey_v0。
+# 若首启解密失败，先核对此值与 /vendor/etc/fstab.mt6762（或 fstab.mt6765）。
+/dev/block/by-name/userdata          /data        ext4    noatime,nosuid,nodev,noauto_da_alloc,errors=panic,inlinecrypt  wait,check,quota,formattable,resize,fileencryption=aes-256-xts:aes-256-cts:v2,metadata_encryption=aes-256-xts,keydirectory=/metadata/vold/metadata_encryption
 
 # ---- MTK 厂商分区 ----
 /dev/block/by-name/protect1          /mnt/vendor/protect_f   ext4  noatime,nosuid,nodev,noauto_da_alloc,commit=1,nodelalloc  wait,check,formattable
