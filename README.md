@@ -303,6 +303,7 @@ grep -E "Unhandled flag|Failed to mount|keymaster|gatekeeper|metadata|fscrypt|De
 | 19 | CI 无 swap/JOBS 调优 | 8 GB swap + `JOBS=4` + `NINJA_HIGHMEM_NUM_JOBS=2` | 4 核 16 GB 上防 OOM |
 | 20 | 无静态门禁 | `tools/check-tree.py` + CI 前置 | fstab/flag/布局错在编译前暴露 |
 | 21 | 缺 `first_stage_ramdisk/fstab.*`（正常启动 lifeline） | stock fstab 原样入树 + CI 解包 ramdisk 断言 | 缺它正常启动 FATAL/重启循环（recovery 模式不受影响） |
+| 22 | `TARGET_SYSTEM_PROP += $(LOCAL_PATH)/system.prop` | 改用静态 `DEVICE_PATH` + check-tree 门禁 | `+=` 生成递归变量，`$(LOCAL_PATH)` 在 core/Makefile 里被重置成 `build/make/core`，build.prop 依赖指向不存在的 `build/make/core/system.prop`，ninja 直接失败（CI 实测） |
 
 ---
 

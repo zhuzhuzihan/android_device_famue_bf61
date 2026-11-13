@@ -6,12 +6,17 @@
 #   同一个开关在 BoardConfig 与 device.mk 各写一份是"改了没生效"的经典来源；
 #   真实 TWRP 树（twrp_sweet 等）的惯例就是把 TW_* 放 device.mk。
 #
-LOCAL_PATH := device/famue/bf61
+# ★ 产品配置里的路径一律用静态字符串 DEVICE_PATH，不要用 $(LOCAL_PATH)：
+#   TARGET_SYSTEM_PROP 这类未定义变量的 += 会变成递归变量，$(LOCAL_PATH) 延迟到
+#   sysprop.mk 生成 build.prop 时才展开；而 core/Makefile 在 include sysprop.mk
+#   前把 LOCAL_PATH 重置成了 $(BUILD_SYSTEM)=build/make/core，于是依赖变成
+#   build/make/core/system.prop → ninja "missing and no known rule"（CI 实测）。
+DEVICE_PATH := device/famue/bf61
 
 # TeamWin build fork 不带 core/tasks/kernel.mk，TARGET_PREBUILT_KERNEL 不会被消费。
 # 不显式拷到 $(PRODUCT_OUT)/kernel，bootimage 链接阶段会报
 # "No rule to make target out/target/product/bf61/kernel"。
-LOCAL_KERNEL := $(LOCAL_PATH)/prebuilt/kernel
+LOCAL_KERNEL := $(DEVICE_PATH)/prebuilt/kernel
 PRODUCT_COPY_FILES += $(LOCAL_KERNEL):kernel
 
 # super 里的逻辑分区（TWRP 需要 liblp）
@@ -28,7 +33,7 @@ PRODUCT_USE_DYNAMIC_PARTITIONS := true
 $(call inherit-product, $(SRC_TARGET_DIR)/product/virtual_ab_ota.mk)
 
 # recovery 侧属性：追加进 ramdisk 的 prop.default
-TARGET_SYSTEM_PROP += $(LOCAL_PATH)/system.prop
+TARGET_SYSTEM_PROP += $(DEVICE_PATH)/system.prop
 
 # OTA / zip 安装时的机型断言
 TARGET_OTA_ASSERT_DEVICE := bf61

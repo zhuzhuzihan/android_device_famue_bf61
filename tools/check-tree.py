@@ -551,6 +551,24 @@ def check_ci():
         ok("vendorsetup.sh 设置了 ALLOW_MISSING_DEPENDENCIES")
 
 
+def check_product_paths():
+    """产品配置里 $(LOCAL_PATH) 是延迟展开的定时炸弹：core/Makefile 会把它重置成
+    build/make/core（sysprop.mk 的 HACK），TARGET_SYSTEM_PROP 等递归变量会展开成
+    错误路径（CI 实测 build/make/core/system.prop）。一律用静态 DEVICE_PATH。"""
+    for rel in ("device.mk", "twrp_bf61.mk"):
+        if not exists(rel):
+            continue
+        for i, line in enumerate(read(os.path.join(ROOT, rel)).splitlines(), 1):
+            code = line.split("#", 1)[0]
+            if "$(LOCAL_PATH)" in code:
+                if "TARGET_SYSTEM_PROP" in code or "TARGET_VENDOR_PROP" in code:
+                    err(f"{rel}:{i}: TARGET_SYSTEM_PROP 使用 $(LOCAL_PATH) —— 递归变量延迟展开"
+                        f"会指向 build/make/core（用静态 DEVICE_PATH）")
+                else:
+                    warn(f"{rel}:{i}: 产品配置使用 $(LOCAL_PATH)（若目标是递归变量会延迟展开，"
+                         f"建议改静态 DEVICE_PATH）")
+
+
 def check_normal_boot():
     """正常启动保命项：recovery-as-boot 的 ramdisk 必须带 first_stage fstab（MTK 无 DT fstab）。"""
     fs = "recovery/root/first_stage_ramdisk/fstab.mt6765"
@@ -594,6 +612,7 @@ def main():
     check_ci()
     check_vab()
     check_normal_boot()
+    check_product_paths()
 
     for m in oks:
         print(f"  ok    {m}")
