@@ -24,6 +24,7 @@ TeamWin Recovery Project **twrp-12.1** 设备树。本机是 A/B + recovery-as-b
 | dtbo 分区 | `dt_table`，真实长度 **34,051 B**（不是 8 MiB） | `dtbo_a.img` |
 | vendor_boot | 64 MiB **全零**，无 `VNDRBOOT` 头 | `vendor_boot_a/b.img` |
 | 分区 | A/B；`boot` 32 MiB、`dtbo` 8 MiB、`super` 5,112,119,296 B | 分区转储 + stock fstab |
+| Virtual A/B | 真 VAB：`ro.virtual_ab.enabled/compression/userspace.snapshots` 全 true；OTA 快照在 super 空闲空间（COW/dm-user），状态在 `/metadata/ota`；stock recovery 自带 `snapuserd` | stock `prop.default:133,134,287` |
 | 动态分区 | `system system_ext vendor product` 在 super 里（`logical`） | stock `fstab.mt6762` |
 | 加密 | FBE v2 `aes-256-xts:aes-256-cts:v2`；`/metadata`(`md_udc`) + `keydirectory=/metadata/vold/metadata_encryption` | stock fstab |
 | keymaster / gatekeeper | HIDL keymaster 4.1、gatekeeper 1.0（TWRP 12.1 只连这两条 HIDL 链） | vendor manifest（需上机复核，见 §7） |
@@ -93,10 +94,24 @@ TWRP 私有语义（`display=`、`backup=`、`flashimg=`、`storage`、`mounttod
 `/vendor/etc/fstab.<hw>`，把 `/data`、`/metadata` 替换掉，且第二趟不带 twrp.flags。
 本树已完整镜像 stock 的分区与加密 flag，不需要二次导入。
 
-### 3.4 A/B 与动态分区
+### 3.4 A/B、动态分区与 Virtual A/B
 `AB_OTA_UPDATER := true` 是硬要求：TWRP 靠它给 super 里的 dm 分区名补 `_a/_b`；
 不写会让 `Prepare_Super_Volume()` 拿裸名找 dm 设备并死等。
 `/super` 不要手写：TWRP 的 `Setup_Super_Partition()` 会自己加，且不去重。
+
+本机是**真 Virtual A/B**（stock prop.default：`ro.virtual_ab.enabled=true` +
+`ro.virtual_ab.compression.enabled=true` + `ro.virtual_ab.userspace.snapshots.enabled=true`，
+OTA 用 super 空闲空间做 COW 快照，合并状态记录在 `/metadata/ota`）。
+这组属性必须出现在 recovery ramdisk 的 prop.default 里，否则 TWRP 会把本机当非 VAB：
+
+- `Format Data` 不会先跑 `Check_Pending_Merges()`（`partitionmanager.cpp:1770`）——
+  OTA 半途（pending merge）时清 data 有数据损坏风险；
+- OTA zip 安装完成后不会重映射 super（`twinstall.cpp:344`）；
+- 重启询问与 `tw_virtual_ab` UI 状态判定（`recovery.cpp:322`、`data.cpp:840`）走错分支。
+
+写法：device.mk 继承 `$(SRC_TARGET_DIR)/product/virtual_ab_ota.mk`（AOSP 标准件，
+带 `ro.virtual_ab.enabled=true` + e2fsck_ramdisk；twrp_coral / los_gs201 同款），
+compression / userspace-snapshots 两个开关放 system.prop，与 stock 逐字一致。
 
 ### 3.5 `ro.hardware = mt6765`
 dtb `/chosen` 里是 `androidboot.hardware=mt6765`，所以主 init rc 必须叫
@@ -251,7 +266,7 @@ grep -E "Unhandled flag|Failed to mount|keymaster|gatekeeper|metadata|fscrypt|De
 | 14 | `TW_DISABLE_TTF := false` 注释自相矛盾 | 整行删除（默认保留 TTF） | 砍 TTF 会开机崩 |
 | 15 | init rc 叫 `mt6762` | `mt6765` + mt6762 import 兜底 | 实际 ro.hardware=mt6765 |
 | 16 | HAL service 无 disabled/无启动触发 | `on property:twrp.mount_to_decrypt=1` 启动 | 等 /vendor 挂载后再 exec |
-| 17 | `ENABLE_VIRTUAL_AB` + `virtual_ab_ota.mk` | 删除 | recovery 不需要；minimal manifest 下徒增依赖 |
+| 17 | `ENABLE_VIRTUAL_AB := true` + 继承 `virtual_ab_ota.mk`（属性层面） | 改为标准继承 `virtual_ab_ota.mk` + system.prop 补 `ro.virtual_ab.compression/userspace.snapshots` | 旧写法只开了构建宏，没把 `ro.virtual_ab.enabled` 带进 recovery prop.default，TWRP 运行时把本机当非 VAB |
 | 18 | CI 克隆默认分支 | 复制 `${{ github.workspace }}` | 保证编的是被推送的 commit |
 | 19 | CI 无 swap/JOBS 调优 | 8 GB swap + `JOBS=4` + `NINJA_HIGHMEM_NUM_JOBS=2` | 4 核 16 GB 上防 OOM |
 | 20 | 无静态门禁 | `tools/check-tree.py` + CI 前置 | fstab/flag/布局错在编译前暴露 |

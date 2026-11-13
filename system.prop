@@ -5,6 +5,12 @@
 ro.board.platform=mt6765
 ro.boot.dynamic_partitions=true
 
+# Virtual A/B 补充开关（ro.virtual_ab.enabled=true 由 device.mk 继承
+# virtual_ab_ota.mk 提供）。stock recovery prop.default 三项齐全，
+# libsnapshot 用它们决定 userspace snapshot / VAB compression 路径。
+ro.virtual_ab.compression.enabled=true
+ro.virtual_ab.userspace.snapshots.enabled=true
+
 # recovery 里不需要 adb 授权弹窗
 ro.adb.secure=0
 

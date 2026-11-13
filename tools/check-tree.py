@@ -551,6 +551,23 @@ def check_ci():
         ok("vendorsetup.sh 设置了 ALLOW_MISSING_DEPENDENCIES")
 
 
+def check_vab():
+    """VAB 机型：TWRP 靠运行时属性 ro.virtual_ab.enabled 判定 pending-merge 检查等行为。"""
+    dev = read(os.path.join(ROOT, "device.mk")) if exists("device.mk") else ""
+    sp = read(os.path.join(ROOT, "system.prop")) if exists("system.prop") else ""
+    if "virtual_ab_ota" in dev or "ro.virtual_ab.enabled=true" in (dev + sp):
+        ok("VAB：ro.virtual_ab.enabled=true 已提供（virtual_ab_ota inherit 或 system.prop）")
+    else:
+        err("VAB 机型缺 ro.virtual_ab.enabled=true —— Format Data 不会检查 pending merge，"
+            "OTA 半途刷机有数据损坏风险（device.mk 继承 virtual_ab_ota.mk）")
+    for need in ("ro.virtual_ab.compression.enabled=true",
+                 "ro.virtual_ab.userspace.snapshots.enabled=true"):
+        if need in sp:
+            ok(f"system.prop 带 {need}")
+        else:
+            warn(f"system.prop 缺 {need}（stock prop.default 同款，libsnapshot 判路径用）")
+
+
 def main():
     print(f"== device tree self-check: {ROOT}")
     check_layout()
@@ -559,6 +576,7 @@ def main():
     check_initrc()
     check_prebuilts()
     check_ci()
+    check_vab()
 
     for m in oks:
         print(f"  ok    {m}")
