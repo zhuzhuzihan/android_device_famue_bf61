@@ -551,6 +551,22 @@ def check_ci():
         ok("vendorsetup.sh 设置了 ALLOW_MISSING_DEPENDENCIES")
 
 
+def check_normal_boot():
+    """正常启动保命项：recovery-as-boot 的 ramdisk 必须带 first_stage fstab（MTK 无 DT fstab）。"""
+    fs = "recovery/root/first_stage_ramdisk/fstab.mt6765"
+    if not exists(fs):
+        err(f"缺 {fs} —— 正常启动时 first-stage mount 找不到 fstab 会 FATAL/重启循环")
+        return
+    text = read(os.path.join(ROOT, fs))
+    for need in ("/dev/block/by-name/userdata", "first_stage_mount", "logical"):
+        if need not in text:
+            err(f"{fs} 内容异常：找不到 '{need}'（不像 stock first-stage fstab）")
+    if exists("recovery/root/first_stage_ramdisk/fstab.mt6762"):
+        ok("first_stage_ramdisk/fstab.mt6765(+mt6762) 已就位（正常启动 lifeline）")
+    else:
+        warn("只有 fstab.mt6765；stock 两个名字都带，建议补 mt6762 副本")
+
+
 def check_vab():
     """VAB 机型：TWRP 靠运行时属性 ro.virtual_ab.enabled 判定 pending-merge 检查等行为。"""
     dev = read(os.path.join(ROOT, "device.mk")) if exists("device.mk") else ""
@@ -577,6 +593,7 @@ def main():
     check_prebuilts()
     check_ci()
     check_vab()
+    check_normal_boot()
 
     for m in oks:
         print(f"  ok    {m}")

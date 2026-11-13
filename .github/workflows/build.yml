@@ -106,6 +106,7 @@ jobs:
           path: |
             /home/runner/twrp-src/out/target/product/bf61/boot.img
             /home/runner/twrp-src/out/target/product/bf61/boot.img.sha256
+            /home/runner/twrp-src/out/target/product/bf61/ramdisk-recovery.img
             /home/runner/twrp-src/out/target/product/bf61/recovery/root/prop.default
             build.log
             out-ci/build-info.txt

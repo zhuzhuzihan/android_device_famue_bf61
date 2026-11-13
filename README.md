@@ -24,6 +24,7 @@ TeamWin Recovery Project **twrp-12.1** 设备树。本机是 A/B + recovery-as-b
 | dtbo 分区 | `dt_table`，真实长度 **34,051 B**（不是 8 MiB） | `dtbo_a.img` |
 | vendor_boot | 64 MiB **全零**，无 `VNDRBOOT` 头 | `vendor_boot_a/b.img` |
 | 分区 | A/B；`boot` 32 MiB、`dtbo` 8 MiB、`super` 5,112,119,296 B | 分区转储 + stock fstab |
+| 正常启动 fstab | stock ramdisk 自带 `first_stage_ramdisk/fstab.mt6762/mt6765`（两份同内容）；TWRP 树必须带，否则正常启动 first-stage mount FATAL | rd_stock 提取 |
 | Virtual A/B | 真 VAB：`ro.virtual_ab.enabled/compression/userspace.snapshots` 全 true；OTA 快照在 super 空闲空间（COW/dm-user），状态在 `/metadata/ota`；stock recovery 自带 `snapuserd` | stock `prop.default:133,134,287` |
 | 动态分区 | `system system_ext vendor product` 在 super 里（`logical`） | stock `fstab.mt6762` |
 | 加密 | FBE v2 `aes-256-xts:aes-256-cts:v2`；`/metadata`(`md_udc`) + `keydirectory=/metadata/vold/metadata_encryption` | stock fstab |
@@ -138,6 +139,36 @@ boot 32 MiB − 内核 10.9 MiB − dtb 0.1 MiB ≈ **20.8 MiB 给 ramdisk.gz**�
 **TTF 不能砍**（recovery 硬链接 libft2，砍掉会开机崩），所以 `TW_DISABLE_TTF` 整行不写。
 `TW_INCLUDE_NTFS_3G` 保留（USB OTG 放 NTFS 盘）；如果超限，优先关它。
 
+### 3.8 刷 TWRP 后还能正常启动系统吗（recovery-as-boot 的双模式原理）
+
+**能，但前提是 ramdisk 保留了正常启动需要的东西。** 这类 MTK A/B 机器 stock 本来就是
+"一份 boot.img 双模式"：
+
+- **正常启动**：bootloader 传 `androidboot.force_normal_boot=1`（`first_stage_init.cpp:106`），
+  init 把 ramdisk 内容 pivot 进 `/first_stage_ramdisk`，用里面的 `fstab.mt6762/mt6765` 做
+  first-stage mount（super→logical 分区），切根 `/system`，系统照跑；ramdisk 里 recovery
+  那堆文件此时根本不被使用。
+- **recovery 启动**（BCB=`boot-recovery`）：不走 pivot，直接在 ramdisk 根跑 recovery。
+
+因此刷 TWRP 后正常启动需要 ramdisk 里仍有：① 可执行 init（构建产物自带）；
+② **`first_stage_ramdisk/fstab.mt6765`** —— MTK 没有 QCOM 那种 DT fstab，
+`GetFstabPath()` 只会在 ramdisk 路径里找（MTK 同构树 selene 的 TWRP 同样带
+`recovery/root/first_stage_ramdisk/fstab.mt6768`）；③ 内核（我们用的就是 stock 内核）。
+
+本树把 **stock 的 first-stage fstab 逐字放进 `recovery/root/first_stage_ramdisk/`**
+（fstab.mt6765 + fstab.mt6762，与 stock ramdisk 一致）。缺它的话正常启动会在
+first-stage mount 处 `LOG(FATAL)` → 重启循环——不是砖，`fastboot flash boot
+bf61_backup/boot_a.img` 一条命令恢复。
+
+CI 里 `ci/build.sh` 会在构建后解包 `ramdisk-recovery.img` 并断言
+`init / prop.default / twrp.flags / recovery.fstab / first_stage fstab` 全部存在，
+产物里也附了 `ramdisk-check.txt` 可直接核对。
+
+诚实的剩余风险：init/first-stage mount 二进制来自 minimal manifest（AOSP 12.1 标准实现），
+不是 MTK 定制版——fs_mgr 对 super/LP/AVB 的处理是标准逻辑，理论兼容，**但正常启动能否
+存活最终只能实机验证**：刷入后先 `fastboot boot` 进 TWRP 确认，再重启验证系统，
+全程不动数据，异常随时刷回 stock boot。
+
 ---
 
 ## 4. 构建
@@ -227,6 +258,7 @@ grep -E "Unhandled flag|Failed to mount|keymaster|gatekeeper|metadata|fscrypt|De
 | 解密失败提示 gatekeeper | vendor HAL 没起：`ps`、`/vendor/bin/hw` 路径、`dmesg | grep avc` |
 | 逻辑分区 0 字节 | `AB_OTA_UPDATER` 是否生效；`/dev/block/by-name/super` 是否存在 |
 | 备份列表没有某分区 | `twrp.flags` 是否给了 `backup=1` |
+| 刷 TWRP 后系统起不来（重启循环） | `out-ci/ramdisk-check.txt` 里 first_stage fstab 是否 OK；正常启动 fstab 路径见 §3.8 |
 
 ---
 
@@ -270,6 +302,7 @@ grep -E "Unhandled flag|Failed to mount|keymaster|gatekeeper|metadata|fscrypt|De
 | 18 | CI 克隆默认分支 | 复制 `${{ github.workspace }}` | 保证编的是被推送的 commit |
 | 19 | CI 无 swap/JOBS 调优 | 8 GB swap + `JOBS=4` + `NINJA_HIGHMEM_NUM_JOBS=2` | 4 核 16 GB 上防 OOM |
 | 20 | 无静态门禁 | `tools/check-tree.py` + CI 前置 | fstab/flag/布局错在编译前暴露 |
+| 21 | 缺 `first_stage_ramdisk/fstab.*`（正常启动 lifeline） | stock fstab 原样入树 + CI 解包 ramdisk 断言 | 缺它正常启动 FATAL/重启循环（recovery 模式不受影响） |
 
 ---
 

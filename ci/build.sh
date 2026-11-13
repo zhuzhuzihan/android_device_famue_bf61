@@ -205,6 +205,56 @@ if fatal:
 print("boot image header OK")
 PY
 
+# ---- ramdisk 内容断言：正常启动 lifeline（first_stage fstab）+ TWRP 关键文件 ----
+RD=$(find "$SRC/out/target/product/$DEVICE" -maxdepth 1 -name 'ramdisk-recovery.img' | head -1)
+[ -n "$RD" ] || die 7 "找不到 ramdisk-recovery.img（无法校验 ramdisk 内容）"
+
+python3 - "$RD" <<'PY' | tee "$LOG_DIR/ramdisk-check.txt"
+import gzip, lzma, sys
+
+path = sys.argv[1]
+magic = open(path, "rb").read(6)
+if magic[:2] == b"\x1f\x8b":
+    data = gzip.open(path, "rb").read()
+elif magic[:3] == b"\xfd7zXZ":
+    data = lzma.open(path, "rb").read()
+else:
+    sys.exit(f"FATAL: ramdisk-recovery.img 既不是 gzip 也不是 xz（magic={magic.hex()}），"
+             f"检查 BOARD_RAMDISK_USE_LZ4 之类的压缩开关")
+
+names, off = [], 0
+while data[off:off + 6] in (b"070701", b"070702"):
+    hdr = data[off:off + 110]
+    size = int(hdr[54:62], 16)
+    nlen = int(hdr[94:102], 16)
+    name = data[off + 110:off + 110 + nlen - 1].decode("utf-8", "replace")
+    off = (off + 110 + nlen + 3) & ~3        # 数据起点（4 字节对齐）
+    off = (off + size + 3) & ~3              # 下一表项
+    if name == "TRAILER!!!":
+        break
+    names.append(name)
+
+have = set(names)
+print(f"ramdisk: {path}  entries={len(names)}")
+for label, key in (("init", "init"),
+                   ("prop.default", "prop.default"),
+                   ("twrp.flags", "system/etc/twrp.flags"),
+                   ("recovery.fstab", "system/etc/recovery.fstab"),
+                   ("twres/", "twres"),
+                   ("first_stage fstab (normal-boot lifeline)",
+                    "first_stage_ramdisk/fstab.mt6765")):
+    ok = any(n == key or n.startswith(key) for n in names)
+    print(f"{label:<44} {'OK' if ok else 'MISSING'}")
+
+missing = [n for n in ("init", "prop.default", "system/etc/twrp.flags",
+                       "system/etc/recovery.fstab",
+                       "first_stage_ramdisk/fstab.mt6765") if n not in have]
+if missing:
+    print("FATAL: ramdisk missing: " + ", ".join(missing))
+    sys.exit(1)
+print("ramdisk content OK")
+PY
+
 say "产物校验通过"
 ( cd "$(dirname "$IMG")" && sha256sum boot.img > boot.img.sha256 && cat boot.img.sha256 )
 say "完成：$IMG"
