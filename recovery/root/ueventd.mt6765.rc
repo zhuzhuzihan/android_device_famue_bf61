@@ -1,0 +1,5 @@
+# Famue BF61 recovery ueventd 扩展
+# TEE / RPMB 节点的访问权限（MTK 平台惯例）。
+# 若 dmesg 里没有相关 avc/permission 报错，这两行可以直接删掉。
+/dev/gz_kree          0660   system     drmrpc
+/dev/mmcblk0rpmb      0660   system     drmrpc

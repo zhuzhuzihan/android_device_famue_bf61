@@ -1,0 +1,15 @@
+# device/famue/bf61/system.prop
+# 由 TARGET_SYSTEM_PROP 合并进 recovery ramdisk 的 prop.default。
+
+# 平台 / 动态分区
+ro.board.platform=mt6765
+ro.boot.dynamic_partitions=true
+
+# recovery 里不需要 adb 授权弹窗
+ro.adb.secure=0
+
+# FBE / metadata 解密
+# gatekeeper 的 SPU 路径在非 QTI 环境下常不可用，强制走软件路径
+vendor.gatekeeper.disable_spu=true
+# metadata 加密使用 wrapped key（与 fstab 的 metadata_encryption=...wrappedkey_v0 对应）
+fbe.metadata.wrappedkey=true

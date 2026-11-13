@@ -1,0 +1,53 @@
+# device/famue/bf61/recovery/root/system/etc/twrp.flags
+#
+# TWRP 私有 flag 增量层（v1 格式，绝对不能用逗号分隔）：
+#   <挂载点> <fs> <设备> [设备2] [length=] flags=a;b;c
+# 源码对 /etc/twrp.flags 强制 Process_TW_Flags(..., 1)，见 partition.cpp:656：
+# 写成逗号会被当成一个超长 flag，后面的 flag 全部静默丢失。
+# 这里的块设备会覆盖 recovery.fstab 同挂载点 v2 行的设备（partition.cpp:416-431）。
+#
+# 只放 TWRP 语义：UI 显示名、备份/刷镜像、存储卷、slot 选择、mounttodecrypt。
+# 加密相关（fileencryption/metadata_encryption/keydirectory）留在 recovery.fstab，
+# 因为那份文件还要被 fs_mgr/vold 按 AOSP 语法解析。
+
+# ---- 数据分区：内部存储 + 可格式化 + 加密备份 ----
+/data        ext4   /dev/block/by-name/userdata          flags=display="Data";storage;settingsstorage;wipeingui;formattable;canencryptbackup;userdataencryptbackup
+/metadata    ext4   /dev/block/by-name/md_udc            flags=display="Metadata";mounttodecrypt
+
+# ---- super 逻辑分区 ----
+# 只给 /vendor 打补丁（挂载点不会被改名）。/system 会被 TWRP 改名为 /system_root，
+# 在 twrp.flags 里再写 /system 会查不到、并被当成新分区追加，产生重复条目 —— 不要写。
+# /system_ext、/product 的显示名 TWRP 有默认值，无需补。
+/vendor      ext4   vendor                               flags=mounttodecrypt
+
+# ---- 可刷写的实体镜像分区 ----
+# slotselect：A/B 机型按 ro.boot.slot_suffix 选 _a/_b；无后缀路径不存在时会静默回退。
+/boot        emmc   /dev/block/by-name/boot               flags=display="Boot";backup=1;flashimg=1;slotselect
+/dtbo        emmc   /dev/block/by-name/dtbo               flags=display="Dtbo";backup=1;flashimg=1;slotselect
+/vbmeta      emmc   /dev/block/by-name/vbmeta             flags=display="VBMeta";flashimg=1;slotselect
+/vbmeta_system emmc /dev/block/by-name/vbmeta_system      flags=display="VBMeta System";flashimg=1;slotselect
+/vbmeta_vendor emmc /dev/block/by-name/vbmeta_vendor      flags=display="VBMeta Vendor";flashimg=1;slotselect
+/logo        emmc   /dev/block/by-name/logo               flags=display="Logo";backup=1;flashimg=1
+/misc        emmc   /dev/block/by-name/para               flags=display="Misc";flashimg=1
+/persistent  emmc   /dev/block/by-name/frp                flags=display="FRP";backup=1
+
+# ---- MTK 固件 / 标定分区（可按需删行精简界面）----
+/nvram       emmc   /dev/block/by-name/nvram              flags=display="NVRAM";backup=1;flashimg=1
+/proinfo     emmc   /dev/block/by-name/proinfo            flags=display="ProInfo";backup=1;flashimg=1
+/expdb       emmc   /dev/block/by-name/expdb              flags=display="EXPdb";backup=1;flashimg=1
+/seccfg      emmc   /dev/block/by-name/seccfg             flags=display="SECCFG";backup=1;flashimg=1
+/tee1        emmc   /dev/block/by-name/tee1               flags=display="TEE1";backup=1;flashimg=1
+/tee2        emmc   /dev/block/by-name/tee2               flags=display="TEE2";backup=1;flashimg=1
+/scp1        emmc   /dev/block/by-name/scp1               flags=display="SCP1";backup=1;flashimg=1
+/scp2        emmc   /dev/block/by-name/scp2               flags=display="SCP2";backup=1;flashimg=1
+/sspm_1      emmc   /dev/block/by-name/sspm_1             flags=display="SSPM1";backup=1;flashimg=1
+/sspm_2      emmc   /dev/block/by-name/sspm_2             flags=display="SSPM2";backup=1;flashimg=1
+/md1img      emmc   /dev/block/by-name/md1img             flags=display="MD1IMG";backup=1;flashimg=1
+/md1dsp      emmc   /dev/block/by-name/md1dsp             flags=display="MD1DSP";backup=1;flashimg=1
+/md1arm7     emmc   /dev/block/by-name/md1arm7            flags=display="MD1ARM7";backup=1;flashimg=1
+/md3img      emmc   /dev/block/by-name/md3img             flags=display="MD3IMG";backup=1;flashimg=1
+/gz1         emmc   /dev/block/by-name/gz1                flags=display="GZ1";backup=1;flashimg=1
+/gz2         emmc   /dev/block/by-name/gz2                flags=display="GZ2";backup=1;flashimg=1
+/spmfw       emmc   /dev/block/by-name/spmfw              flags=display="SPMFW";backup=1;flashimg=1
+/boot_para   emmc   /dev/block/by-name/boot_para          flags=display="Boot Para";backup=1;flashimg=1
+/odmdtbo     emmc   /dev/block/by-name/odmdtbo            flags=display="ODM Dtbo";backup=1;flashimg=1

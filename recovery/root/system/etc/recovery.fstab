@@ -1,0 +1,41 @@
+# device/famue/bf61/recovery/root/system/etc/recovery.fstab
+#
+# TWRP 主分区表（AOSP 五列 + 第 5 列 TWRP flag）。
+# 解析规则（partition.cpp:Process_Fstab_Line / Process_TW_Flags）：
+#   · 第 1 列以 /dev/ 或 /devices/ 开头 → v2，flag 用逗号分隔；
+#   · 第 1 列为裸逻辑分区名（system / vendor …）→ 同样按 v2 解析；
+#   · 第 4 列是 mount(2) 的 options，只会进 Process_FS_Flags；
+#   · 第 5 列才是 TWRP flag（逗号分隔）。把 logical / backup 之类写进第 4 列不会生效。
+# 运行时会经 /etc -> /system/etc 软链接被读到，ramdisk 里不要出现真实 /etc 目录。
+#
+# <src>                              <mnt>        <type>  <mount options>                                            <flags>
+
+# ---- super 里的逻辑分区（源列写逻辑名即可；Prepare_Super_Volume 会换成 dm 设备）----
+system                               /system      ext4    ro                                                         wait,logical
+system_ext                           /system_ext  ext4    ro                                                         wait,logical
+vendor                               /vendor      ext4    ro                                                         wait,logical
+product                              /product     ext4    ro                                                         wait,logical
+
+# ---- metadata：FBE metadata 加密的密钥落点 ----
+# 本文件同时会被 fs_mgr（vold 的 ReadDefaultFstab → /etc/recovery.fstab）解析，
+# 所以第 5 列只写 AOSP 认识的 flag；TWRP 私有的 mounttodecrypt 放在 twrp.flags。
+/dev/block/by-name/md_udc            /metadata    ext4    noatime,nosuid,nodev,discard                               wait,check,formattable
+
+# ---- userdata：FBE v2 + metadata 加密（stock fstab.mt6762 的三个 flag 一个都不能少）----
+# fileencryption=  -> fbe.contents / fbe.filenames
+# metadata_encryption= -> metadata.contents / metadata.filenames
+# keydirectory=    -> Key_Directory；非空即判定 Is_FBE，/data 不直接挂载，走 Decrypt_Data()
+# 注意：stock first_stage fstab 未写 metadata_encryption；本机 /metadata(md_udc) 与
+# keydirectory 都在，按 AOSP 12 的 wrappedkey_v0 约定补齐。若首启解密失败，先核对此值
+# 与 /vendor/etc/fstab.mt6762（或 fstab.mt6765）里的 metadata_encryption=。
+/dev/block/by-name/userdata          /data        ext4    noatime,nosuid,nodev,noauto_da_alloc,errors=panic,inlinecrypt  wait,check,quota,formattable,resize,fileencryption=aes-256-xts:aes-256-cts:v2,metadata_encryption=aes-256-xts:wrappedkey_v0,keydirectory=/metadata/vold/metadata_encryption
+
+# ---- MTK 厂商分区 ----
+/dev/block/by-name/protect1          /mnt/vendor/protect_f   ext4  noatime,nosuid,nodev,noauto_da_alloc,commit=1,nodelalloc  wait,check,formattable
+/dev/block/by-name/protect2          /mnt/vendor/protect_s   ext4  noatime,nosuid,nodev,noauto_da_alloc,commit=1,nodelalloc  wait,check,formattable
+/dev/block/by-name/nvdata            /mnt/vendor/nvdata      ext4  noatime,nosuid,nodev,noauto_da_alloc,commit=1,nodelalloc  wait,check,formattable
+/dev/block/by-name/nvcfg             /mnt/vendor/nvcfg       ext4  noatime,nosuid,nodev,noauto_da_alloc,commit=1,nodelalloc  wait,check,formattable
+
+# ---- 可移动存储（TWRP 会把它们变成 storage 卷）----
+/devices/platform/externdevice*      auto         auto    defaults                                                   voldmanaged=sdcard1:auto,encryptable=userdata
+/devices/platform/mt_usb*            auto         vfat    defaults                                                   voldmanaged=usbotg:auto

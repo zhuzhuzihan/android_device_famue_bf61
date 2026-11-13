@@ -3,3 +3,12 @@ extract/
 rescue_kit/
 vendor_a.img
 *.rar
+
+# 构建 / CI 产物
+out/
+out-ci/
+build.log
+*.log
+.ccache/
+__pycache__/
+*.pyc

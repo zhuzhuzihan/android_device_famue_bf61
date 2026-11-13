@@ -1,26 +1,4 @@
-# Famue BF61 TWRP recovery init extras
-# USB controller: MTK musb-hdrc (from stock init.recovery.mt6762.rc)
-
-on init
-    setprop sys.usb.controller "musb-hdrc"
-    setprop sys.usb.configfs 1
-    setprop sys.usb.ffs.aio_compat 1
-
-on fs && property:ro.debuggable=0
-    write /sys/class/udc/musb-hdrc/device/cmode 2
-    start adbd
-
-# Vendor decryption HALs for FBE decryption
-service vendor.keymaster-4-1 /vendor/bin/hw/android.hardware.keymaster@4.1-service
-    interface android.hardware.keymaster@4.0::IKeymasterDevice default
-    interface android.hardware.keymaster@4.1::IKeymasterDevice default
-    class hal
-    user system
-    group system drmrpc
-    seclabel u:r:recovery:s0
-
-service vendor.gatekeeper-1-0 /vendor/bin/hw/android.hardware.gatekeeper@1.0-service
-    interface android.hardware.gatekeeper@1.0::IGatekeeper default
-    user system
-    group system
-    seclabel u:r:recovery:s0
+# ro.hardware 兜底：本机实际是 mt6765（DTB /chosen: androidboot.hardware=mt6765），
+# 但 stock ramdisk 同时提供了 mt6762/mt6765 两份同名内容。这里只做转发，
+# 避免某些固件/启动方式把 ro.hardware 报成 mt6762 时 USB、adbd 全部失效。
+import /init.recovery.mt6765.rc

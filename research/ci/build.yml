@@ -1,0 +1,276 @@
+# =============================================================================
+# Build TWRP boot.img for Famue BF61 (MT6762 / mt6765 BSP, A/B, recovery-as-boot)
+#
+# DRAFT location: research/ci/build.yml
+# Promotion to the real workflow (.github/workflows/build.yml) requires editing
+# exactly ONE block — the `env:` map below:  CI_DIR=ci, ENV_FILE=devices/bf61.env
+# and copy research/ci/build.sh -> ci/build.sh, research/ci/bf61.env -> devices/bf61.env.
+#
+# Design follows references/17-github-actions.md, with its two hard rules:
+#   1. the equivalent of `swap-storage: false`  -> cleanup runs in shell and
+#      asserts the swap table is unchanged, then we build our own 8 GB swap;
+#   2. JOBS = min(nproc, (RAM+swap)/4) and NINJA_HIGHMEM_NUM_JOBS=2.
+#
+# Why the device tree is *copied* from the checkout instead of being pulled via
+# a .repo/local_manifest with revision=$GITHUB_SHA:
+#   * the copy is the exact pushed commit by construction (verified with
+#     `git rev-parse HEAD == GITHUB_SHA` inside ci/build.sh);
+#   * it also works for pull_request runs, where GITHUB_SHA is the merge commit
+#     and does not exist in the device-tree remote at all (a local_manifest
+#     revision would hard-fail);
+#   * no second network round-trip for a tree we already have.
+# (Fetching a pushed SHA directly from GitHub does work — verified — so the
+# local/no-checkout mode of ci/build.sh keeps that path as a fallback.)
+# =============================================================================
+name: Build TWRP boot.img (BF61)
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+  pull_request:
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+  workflow_dispatch:
+    inputs:
+      jobs:
+        description: "JOBS override (empty = min(nproc, (RAM+swap)/4))"
+        required: false
+        default: ""
+      swap_gb:
+        description: "self-built swap size in GB (lower to 4 when the freed disk is small)"
+        required: false
+        default: "8"
+      ccache:
+        description: "enable ccache (capped at 5 GB)"
+        type: choice
+        options: ["true", "false"]
+        default: "false"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: twrp-bf61-${{ github.ref }}
+  cancel-in-progress: true
+
+# Promotion to .github/workflows/build.yml: only CI_DIR and ENV_FILE change.
+env:
+  CI_DIR: research/ci
+  ENV_FILE: research/ci/bf61.env
+  WORK: ${{ github.workspace }}/work
+  # adaptive reclaim of .repo/project-objects when the freed disk is tight
+  RECLAIM_DOT_REPO: "1"
+  # never touched by the cleanup step; the swap we create is the OOM cushion
+  SWAP_GB: ${{ inputs.swap_gb || '8' }}
+  JOBS: ${{ inputs.jobs || 'auto' }}
+  NINJA_HIGHMEM_NUM_JOBS: "2"
+  CCACHE_ENABLE: ${{ inputs.ccache == 'false' && '0' || '1' }}
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build:
+    name: bootimage (twrp-12.1)
+    runs-on: ubuntu-22.04
+    # GitHub-hosted hard cap is 360 min; stay below it and let steps fail first.
+    timeout-minutes: 350
+    steps:
+      - name: Checkout (exact pushed commit)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Record runner / commit context
+        run: |
+          set -euo pipefail
+          mkdir -p "$WORK/logs"
+          {
+            echo "commit=$(git rev-parse HEAD)"
+            echo "github_sha=$GITHUB_SHA"
+            echo "ref=$GITHUB_REF"
+            echo "run=$GITHUB_RUN_ID/$GITHUB_RUN_NUMBER attempt=$GITHUB_RUN_ATTEMPT"
+            echo "kernel=$(uname -srm)"
+            echo "nproc=$(nproc)"
+            echo "image=${ImageOS:-unknown}"
+          } | tee "$WORK/logs/context.txt"
+          # the whole point of this workflow: build the pushed commit, not a branch tip
+          if [ "$(git rev-parse HEAD)" != "$GITHUB_SHA" ]; then
+            echo "::error::checkout HEAD != GITHUB_SHA"
+            exit 1
+          fi
+          {
+            echo '--- df -h / ---'; df -h /
+            echo '--- free -h ---'; free -h
+            echo '--- swapon ---'; sudo swapon --show || true
+          } | tee -a "$WORK/logs/context.txt"
+
+      - name: "Free disk space (swap 必须保留 / swap-storage: false)"
+        run: |
+          set -euo pipefail
+          swap_before=$(sudo swapon --show --noheadings 2>/dev/null | wc -l)
+          echo "swap entries before cleanup: $swap_before"
+          sudo rm -rf \
+            /usr/local/lib/android \
+            /usr/share/dotnet \
+            /usr/local/share/boost \
+            /opt/ghc \
+            /usr/local/.ghcup \
+            /opt/hostedtoolcache \
+            /usr/local/lib/node_modules \
+            /usr/share/swift \
+            /usr/local/envs 2>/dev/null || true
+          sudo apt-get -qq clean || true
+          sudo rm -rf /var/lib/apt/lists/* || true
+          sudo docker image prune -af || true
+          swap_after=$(sudo swapon --show --noheadings 2>/dev/null | wc -l)
+          echo "swap entries after cleanup: $swap_after"
+          if [ "$swap_before" -gt 0 ] && [ "$swap_after" -lt "$swap_before" ]; then
+            echo "::error::cleanup removed swap (equivalent to free-disk-space swap-storage: true) -> guaranteed OOM"
+            exit 1
+          fi
+          df -h /
+
+      - name: Setup swap (OOM cushion)
+        run: |
+          set -euo pipefail
+          free_gb=$(df -Pk / | awk 'NR==2{printf "%d", ($4/1048576)+0.5}')
+          swap_gb="${SWAP_GB:-8}"
+          if [ "$free_gb" -lt 45 ] && [ "$swap_gb" -gt 4 ]; then
+            echo "::warning::only ${free_gb}GB free after cleanup -> swap lowered to 4GB to protect out/"
+            swap_gb=4
+          fi
+          sudo swapoff -a || true
+          sudo rm -f /swapfile /mnt/swapfile
+          sudo fallocate -l "${swap_gb}G" /swapfile ||
+            sudo dd if=/dev/zero of=/swapfile bs=1M count=$((swap_gb * 1024)) status=none
+          sudo chmod 600 /swapfile
+          sudo mkswap /swapfile >/dev/null
+          sudo swapon /swapfile
+          sudo sysctl -qw vm.swappiness=10
+          sudo sysctl -qw vm.vfs_cache_pressure=50
+          sudo sysctl -qw vm.overcommit_memory=1
+          sudo swapon --show
+          free -h
+          if ! awk '/^SwapTotal:/{exit !($2 > 0)}' /proc/meminfo; then
+            echo "::error::swap did not come up"
+            exit 1
+          fi
+
+      - name: Install build dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            bc bison build-essential ccache curl flex g++-multilib gcc-multilib \
+            git gnupg gperf imagemagick lib32ncurses5-dev lib32readline-dev \
+            lib32z1-dev libelf-dev liblz4-tool libncurses5 libncurses5-dev \
+            libsdl1.2-dev libssl-dev libxml2 libxml2-utils lzop pngcrush rsync \
+            schedtool squashfs-tools xsltproc zip zlib1g-dev python3 openjdk-11-jdk
+          # some legacy makefiles still invoke `python`
+          sudo ln -sf /usr/bin/python3 /usr/bin/python
+          python3 --version
+          ccache --version | head -1
+          rsync --version | head -1
+
+      - name: Restore ccache
+        if: env.CCACHE_ENABLE == '1'
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ env.WORK }}/.ccache
+          key: ccache-bf61-bootimage-${{ github.sha }}-${{ github.run_id }}
+          restore-keys: |
+            ccache-bf61-bootimage-
+
+      - name: Preflight (memory / disk budget / tools)
+        run: bash "$CI_DIR/build.sh" "$ENV_FILE" preflight
+
+      - name: Sync TWRP sources (twrp-12.1, depth=1)
+        timeout-minutes: 90
+        run: bash "$CI_DIR/build.sh" "$ENV_FILE" sync
+
+      - name: Materialize device tree @ ${{ github.sha }} + check-tree gate
+        env:
+          DEVICE_TREE_SRC: ${{ github.workspace }}
+          DEVICE_TREE_REV: ${{ github.sha }}
+        run: bash "$CI_DIR/build.sh" "$ENV_FILE" tree
+
+      - name: Build bootimage (BOARD_USES_RECOVERY_AS_BOOT)
+        timeout-minutes: 240
+        run: bash "$CI_DIR/build.sh" "$ENV_FILE" build
+
+      - name: Verify boot.img (header v2 + ramdisk payload)
+        run: bash "$CI_DIR/build.sh" "$ENV_FILE" verify
+
+      - name: Package artifacts + SHA256SUMS
+        if: always()
+        env:
+          PACKAGE_STRICT: ${{ job.status == 'success' && '1' || '0' }}
+        run: bash "$CI_DIR/build.sh" "$ENV_FILE" package
+
+      - name: Save ccache
+        if: success() && env.CCACHE_ENABLE == '1'
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ env.WORK }}/.ccache
+          key: ccache-bf61-bootimage-${{ github.sha }}-${{ github.run_id }}
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: twrp-bf61-${{ github.sha }}
+          path: |
+            work/artifacts/*
+          if-no-files-found: warn
+          compression-level: 0
+          retention-days: 14
+
+      - name: Job summary
+        if: always()
+        run: |
+          {
+            echo '## TWRP BF61 build'
+            echo '```'
+            cat "$WORK/logs/context.txt" 2>/dev/null || true
+            echo '```'
+            for f in tree-info bootimg-info; do
+              if [ -f "$WORK/logs/$f.txt" ]; then
+                echo "### $f"
+                echo '```'
+                cat "$WORK/logs/$f.txt"
+                echo '```'
+              fi
+            done
+            if [ -f "$WORK/artifacts/SHA256SUMS" ]; then
+              echo '### SHA256SUMS'
+              echo '```'
+              cat "$WORK/artifacts/SHA256SUMS"
+              echo '```'
+            fi
+            if [ -f "$WORK/logs/oom-report.txt" ]; then
+              echo '### failure diagnostics'
+              echo '```'
+              head -40 "$WORK/logs/oom-report.txt"
+              echo '```'
+            fi
+          } >>"$GITHUB_STEP_SUMMARY"
+
+      - name: "Always: OOM / disk diagnostics"
+        if: failure() || cancelled()
+        run: |
+          set +e
+          echo '--- dmesg OOM ---'
+          { dmesg 2>/dev/null || sudo dmesg 2>/dev/null; } | grep -iE 'killed process|out of memory|oom-kill|oom_reaper' | tail -20
+          echo '--- free -h ---'; free -h
+          echo '--- swapon ---'; sudo swapon --show
+          echo '--- df -h ---'; df -h
+          echo '--- memory timeline (tail) ---'; tail -20 "$WORK/logs/mem-timeline.log" 2>/dev/null
+          echo '--- build.log signatures ---'
+          grep -nE 'No space left on device|posix_spawn: Cannot allocate memory|Killed signal|FAILED: ' "$WORK/build.log" 2>/dev/null | tail -20

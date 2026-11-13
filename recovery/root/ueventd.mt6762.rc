@@ -1,3 +1,0 @@
-# BF61 recovery ueventd extras
-/dev/gz_kree             0660   system     drmrpc
-/dev/mmcblk0rpmb         0660   system     drmrpc

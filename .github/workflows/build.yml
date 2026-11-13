@@ -1,78 +1,131 @@
-name: Build TWRP for BF61
+name: Build TWRP boot.img (BF61)
+
+# 本机是 A/B + recovery-as-boot：产物是 boot.img，刷 boot 分区。
+# 文档：README.md「构建」「刷入」两节；CI 逻辑集中在 ci/build.sh。
 
 on:
   push:
     branches: [main]
     paths-ignore:
       - '**.md'
+      - 'research/**'
+  pull_request:
+    branches: [main]
   workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
+    name: twrp-12.1 / bf61 / bootimage
     runs-on: ubuntu-22.04
+    timeout-minutes: 360
+
     steps:
+      - name: Checkout (builds this exact commit)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      # 关键：不要用 free-disk-space 的 swap-storage=true（那是删 swap）。
+      # 顺序 = 先清盘腾空间，再自建 8 GB swap。
       - name: Free disk space
         run: |
-          sudo rm -rf /usr/local/lib/android /opt/ghc /usr/local/.ghcup             /usr/share/dotnet /opt/hostedtoolcache/CodeQL             /usr/local/share/boost /usr/lib/jvm/*-temurin-*             /usr/share/swift /usr/local/lib/node_modules || true
+          set -x
+          sudo rm -rf /usr/local/lib/android \
+                      /usr/local/lib/node_modules \
+                      /usr/local/share/boost \
+                      /usr/local/share/powershell \
+                      /usr/local/.ghcup \
+                      /usr/share/dotnet \
+                      /usr/share/swift \
+                      /opt/ghc \
+                      /opt/hostedtoolcache \
+                      /opt/az \
+                      /opt/microsoft \
+                      /usr/lib/google-cloud-sdk \
+                      /usr/lib/jvm/*temurin* || true
+          sudo apt-get clean
+          sudo rm -rf /var/lib/apt/lists/* || true
           sudo docker image prune -af || true
           df -h /
 
-      - name: Checkout workflow repo
-        uses: actions/checkout@v4
+      - name: Setup swap (6 GB)
+        run: |
+          set -euo pipefail
+          sudo swapoff -a || true
+          sudo rm -f /swapfile
+          sudo fallocate -l 6G /swapfile || sudo dd if=/dev/zero of=/swapfile bs=1M count=6144 status=none
+          sudo chmod 600 /swapfile
+          sudo mkswap /swapfile
+          sudo swapon /swapfile
+          sudo sysctl -w vm.swappiness=10
+          sudo sysctl -w vm.vfs_cache_pressure=50
+          sudo sysctl -w vm.overcommit_memory=1
+          free -h
+          swapon --show
 
       - name: Install build dependencies
         run: |
+          set -euo pipefail
           sudo apt-get update
-          sudo apt-get install -y python3-pip
-          sudo ln -sf /usr/bin/python3 /usr/bin/python
-          sudo apt-get install -y git-lfs \
+          sudo apt-get install -y --no-install-recommends \
             bc bison build-essential ccache curl flex g++-multilib gcc-multilib \
-            git gnupg gperf imagemagick lib32ncurses5-dev lib32readline-dev \
-            lib32z1-dev libelf-dev liblz4-tool libncurses5 libncurses5-dev \
-            libsdl1.2-dev libssl-dev libxml2 libxml2-utils lzop maven pngcrush \
-            rsync schedtool squashfs-tools xsltproc zip zlib1g-dev
+            git gnupg gperf imagemagick lib32readline-dev lib32z1-dev libelf-dev \
+            liblz4-tool libncurses-dev libsdl1.2-dev libssl-dev libxml2 libxml2-utils \
+            lzop pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev \
+            python3 python-is-python3
+          # 22.04 上部分包名与 20.04 不同，缺了不影响 recovery 构建
+          sudo apt-get install -y lib32ncurses-dev || true
+          sudo ln -sf /usr/bin/python3 /usr/bin/python
+          python3 --version
+          nproc
 
-      - name: Initialize repo (minimal-manifest-twrp twrp-12.1)
+      - name: Build boot.img
+        env:
+          # 绝对路径：workflow 的 env 值不会做 shell 展开
+          SRC: /home/runner/twrp-src
+          DEVICE_TREE_SRC: ${{ github.workspace }}
+          # 4 vCPU；16 GB + 8 GB swap 下 JOBS=4 / highmem=2 是稳的（§17 表）
+          JOBS: "4"
+          NINJA_HIGHMEM_NUM_JOBS: "2"
         run: |
-          mkdir -p $HOME/twrp-src
-          cd $HOME/twrp-src
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          mkdir -p $HOME/.local/bin
-          curl -s https://storage.googleapis.com/git-repo-downloads/repo -o $HOME/.local/bin/repo
-          chmod a+x $HOME/.local/bin/repo
-          export PATH=$HOME/.local/bin:$PATH
-          repo init --depth=1 -u https://github.com/minimal-manifest-twrp/platform_manifest_twrp_aosp.git -b twrp-12.1
-
-      - name: Sync sources
-        run: |
-          export PATH=$HOME/.local/bin:$PATH
-          cd $HOME/twrp-src
-          repo sync -c -j4 --no-tags --fail-fast
-
-      - name: Clone device tree into source tree
-        run: |
-          cd $HOME/twrp-src
-          mkdir -p device/famue
-          git clone --depth=1 https://github.com/zhuzhuzihan/android_device_famue_bf61 device/famue/bf61
-          ls -la device/famue/bf61/
-          ls -la device/famue/bf61/prebuilt/
-
-      - name: Build boot image
-        run: |
-          cd $HOME/twrp-src
           set -o pipefail
-          source build/envsetup.sh
-          lunch twrp_bf61-eng
-          mka bootimage -j$(nproc) 2>&1 | tee build.log
+          bash ci/build.sh ci/bf61.env 2>&1 | tee build.log
 
       - name: Upload artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: twrp-bf61
+          name: twrp-bf61-${{ github.sha }}
           path: |
             /home/runner/twrp-src/out/target/product/bf61/boot.img
-            /home/runner/twrp-src/out/target/product/bf61/*.zip
-            /home/runner/twrp-src/build.log
+            /home/runner/twrp-src/out/target/product/bf61/boot.img.sha256
+            /home/runner/twrp-src/out/target/product/bf61/recovery/root/prop.default
+            build.log
+            out-ci/build-info.txt
+            out-ci/tree-check.log
+            out-ci/bootimg-info.txt
+            out-ci/diagnostics.txt
           if-no-files-found: warn
+          retention-days: 14
+
+      - name: Job summary
+        if: always()
+        run: |
+          {
+            echo "## TWRP BF61 — ${{ github.sha }}"
+            echo ""
+            echo '```'
+            echo "commit: $(git rev-parse --short HEAD)"
+            ls -lh /home/runner/twrp-src/out/target/product/bf61/boot.img 2>/dev/null || echo "boot.img: missing"
+            cat /home/runner/twrp-src/out/target/product/bf61/boot.img.sha256 2>/dev/null || true
+            echo '```'
+            echo ""
+            echo "日志：CI artifact \`twrp-bf61-${GITHUB_SHA}\`；闪入方式见 README。"
+          } >> "$GITHUB_STEP_SUMMARY"

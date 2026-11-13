@@ -1,0 +1,50 @@
+# Famue BF61 (MT6762 SoC / mt6765 BSP) — TWRP recovery init 扩展
+# 文件名必须等于 ro.hardware。本机 ro.hardware 来自 DTB /chosen 的
+# androidboot.hardware=mt6765，所以主文件叫 init.recovery.mt6765.rc；
+# init.recovery.mt6762.rc 只保留一个 import 兜底（stock ramdisk 两个名字都带）。
+# 内容以 stock ramdisk 的 init.recovery.mt6762.rc 为基线，只去掉 update_engine 专用部分。
+
+on init
+    # USB：MTK musb-hdrc + configfs（与 stock 一致；配合 TW_EXCLUDE_DEFAULT_USB_INIT）
+    setprop sys.usb.configfs 1
+    setprop sys.usb.controller "musb-hdrc"
+    setprop sys.usb.ffs.aio_compat 1
+    # 解密排障时打开（输出到 /tmp/recovery.log）：
+    # setprop prepdecrypt.loglevel 2
+
+on fs
+    # fstab 用 /dev/block/by-name/*；MTK 的 by-name 在 platform/bootdevice 下。
+    # twrpRepacker / super 逻辑分区都要 /dev/block/bootdevice 这个别名。
+    wait /dev/block/platform/bootdevice
+    symlink /dev/block/platform/bootdevice /dev/block/bootdevice
+
+on post-fs
+    # stock 在 recovery 里补 preloader_a/b 的 by-name 链接（A/B 刷 preloader 用）
+    symlink /dev/block/sda /dev/block/mmcblk0boot0
+    symlink /dev/block/sdb /dev/block/mmcblk0boot1
+    symlink /dev/block/mmcblk0boot0 /dev/block/platform/bootdevice/by-name/preloader_a
+    symlink /dev/block/mmcblk0boot1 /dev/block/platform/bootdevice/by-name/preloader_b
+    symlink /dev/block/mmcblk0boot0 /dev/block/by-name/preloader_a
+    symlink /dev/block/mmcblk0boot1 /dev/block/by-name/preloader_b
+
+# ---- FBE 解密所需的 vendor HAL ----
+# 时机：PartitionManager::Decrypt_Data() 先挂载所有 mounttodecrypt 分区
+# （/vendor、/metadata），随后置 twrp.mount_to_decrypt=1；此时 /vendor/bin 才可见。
+# TWRP 12.1 只连接 HIDL keymaster 4.x 与 gatekeeper 1.0（system/vold Decrypt.cpp）。
+on property:twrp.mount_to_decrypt=1
+    start vendor.keymaster-4-1
+    start vendor.gatekeeper-1-0
+
+service vendor.keymaster-4-1 /vendor/bin/hw/android.hardware.keymaster@4.1-service
+    user root
+    group root system drmrpc
+    disabled
+    setenv LD_LIBRARY_PATH /vendor/lib64:/vendor/lib:/system/lib64:/system/lib
+    seclabel u:r:recovery:s0
+
+service vendor.gatekeeper-1-0 /vendor/bin/hw/android.hardware.gatekeeper@1.0-service
+    user root
+    group root system
+    disabled
+    setenv LD_LIBRARY_PATH /vendor/lib64:/vendor/lib:/system/lib64:/system/lib
+    seclabel u:r:recovery:s0
